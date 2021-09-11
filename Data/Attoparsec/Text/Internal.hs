@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, FlexibleInstances, GADTs, OverloadedStrings,
+{-# LANGUAGE BangPatterns, CPP, FlexibleInstances, GADTs, OverloadedStrings,
     Rank2Types, RecordWildCards, TypeFamilies, TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
@@ -176,8 +176,14 @@ string_ suspended f s0 = T.Parser $ \t pos more lose succ ->
          | T.null ft         -> suspended s s t pos more lose succ
          | otherwise         -> lose t pos more [] "string"
        Just (pfx,ssfx,tsfx)
-         | T.null ssfx       -> let l = Pos (T.lengthWord16 pfx)
+         | T.null ssfx       -> let l =
+#if MIN_VERSION_text(2,0,0)
+                                      Pos (T.lengthWord8 pfx)
+#else
+                                      Pos (T.lengthWord16 pfx)
+#endif
                                 in succ t (pos + l) more (substring pos l t)
+
          | not (T.null tsfx) -> lose t pos more [] "string"
          | otherwise         -> suspended s ssfx t pos more lose succ
 {-# INLINE string_ #-}
@@ -195,8 +201,13 @@ stringSuspended f s000 s0 t0 pos0 more0 lose0 succ0 =
       in case T.commonPrefixes s0 s of
         Nothing         -> lose t pos more [] "string"
         Just (_pfx,ssfx,tsfx)
-          | T.null ssfx -> let l = Pos (T.lengthWord16 s000)
-                           in succ t (pos + l) more (substring pos l t)
+          | T.null ssfx -> let
+#if MIN_VERSION_text(2,0,0)
+                             l = Pos (T.lengthWord8 s000)
+#else
+                             l = Pos (T.lengthWord16 s000)
+#endif
+                            in succ t (pos + l) more (substring pos l t)
           | T.null tsfx -> stringSuspended f s000 ssfx t pos more lose succ
           | otherwise   -> lose t pos more [] "string"
 

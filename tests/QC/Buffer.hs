@@ -24,6 +24,14 @@ data BP t b = BP [t] !t !b
 type BPB = BP B.ByteString BB.Buffer
 type BPT = BP T.Text BT.Buffer
 
+lengthN :: T.Text -> Int
+#if MIN_VERSION_text(2,0,0)
+lengthN = T.lengthWord8
+#else
+lengthN = T.lengthWord16
+#endif
+
+
 instance Arbitrary BPB where
   arbitrary = do
     bss <- arbitrary
@@ -51,7 +59,7 @@ b_length :: BPB -> Property
 b_length (BP _ts t buf) = B.length t === BB.length buf
 
 t_length :: BPT -> Property
-t_length (BP _ts t buf) = T.lengthWord16 t === BT.length buf
+t_length (BP _ts t buf) = lengthN t === BT.length buf
 
 b_unsafeIndex :: BPB -> Gen Property
 b_unsafeIndex (BP _ts t buf) = do
@@ -61,14 +69,14 @@ b_unsafeIndex (BP _ts t buf) = do
 
 t_iter :: BPT -> Gen Property
 t_iter (BP _ts t buf) = do
-  let l = T.lengthWord16 t
+  let l = lengthN t
   i <- choose (0,l-1)
   let it (T.Iter c q) = (c,q)
   return $ l === 0 .||. it (T.iter t i) === it (BT.iter buf i)
 
 t_iter_ :: BPT -> Gen Property
 t_iter_ (BP _ts t buf) = do
-  let l = T.lengthWord16 t
+  let l = lengthN t
   i <- choose (0,l-1)
   return $ l === 0 .||. T.iter_ t i === BT.iter_ buf i
 
@@ -79,8 +87,12 @@ b_unsafeDrop (BP _ts t buf) = do
 
 t_dropWord16 :: BPT -> Gen Property
 t_dropWord16 (BP _ts t buf) = do
-  i <- choose (0, T.lengthWord16 t)
+  i <- choose (0, lengthN t)
+#if MIN_VERSION_text(2,0,0)
+  return $ T.dropWord8 i t === BT.dropWord16 i buf
+#else
   return $ T.dropWord16 i t === BT.dropWord16 i buf
+#endif
 
 tests :: [TestTree]
 tests = [

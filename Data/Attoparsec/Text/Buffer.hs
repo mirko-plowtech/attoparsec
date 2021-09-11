@@ -32,7 +32,7 @@ module Data.Attoparsec.Text.Buffer
     , length
     , pappend
     , iter
-    , iter_
+    , Data.Attoparsec.Text.Buffer.iter_
     , substring
     , dropWord16
     ) where
@@ -44,8 +44,12 @@ import Data.Monoid as Mon (Monoid(..))
 import Data.Semigroup (Semigroup(..))
 import Data.Text ()
 import Data.Text.Internal (Text(..))
+#if MIN_VERSION_text(2,0,0)
+import Data.Text.Unsafe (iterArray, iter_)
+#else
 import Data.Text.Internal.Encoding.Utf16 (chr2)
 import Data.Text.Internal.Unsafe.Char (unsafeChr)
+#endif
 import Data.Text.Unsafe (Iter(..))
 import Foreign.Storable (sizeOf)
 import GHC.Exts (Int(..), indexIntArray#, unsafeCoerce#, writeIntArray#)
@@ -108,7 +112,11 @@ append (Buf arr0 off0 len0 cap0 gen0) !arr1 !off1 !len1 = runST $ do
       let newgen = gen + 1
       marr <- unsafeThaw arr0
       writeGen marr newgen
+#if MIN_VERSION_text(2,0,0)
+      A.copyI len1 marr (off0+len0) arr1 off1
+#else
       A.copyI marr (off0+len0) arr1 off1 (off0+newlen)
+#endif
       arr2 <- A.unsafeFreeze marr
       return (Buf arr2 off0 newlen cap0 newgen)
     else do
@@ -116,8 +124,13 @@ append (Buf arr0 off0 len0 cap0 gen0) !arr1 !off1 !len1 = runST $ do
           newgen = 1
       marr <- A.new (newcap + woff)
       writeGen marr newgen
+#if MIN_VERSION_text(2,0,0)
+      A.copyI len0 marr woff arr0 off0
+      A.copyI len1 marr (woff+len0) arr1 off1
+#else
       A.copyI marr woff arr0 off0 (woff+len0)
       A.copyI marr (woff+len0) arr1 off1 (woff+newlen)
+#endif
       arr2 <- A.unsafeFreeze marr
       return (Buf arr2 woff newlen newcap newgen)
 
@@ -142,6 +155,9 @@ dropWord16 s (Buf arr off len _ _) =
 -- array, returning the current character and the delta to add to give
 -- the next offset to iterate at.
 iter :: Buffer -> Int -> Iter
+#if MIN_VERSION_text(2,0,0)
+iter (Buf arr _ _ _ _) i = iterArray arr i
+#else
 iter (Buf arr off _ _ _) i
     | m < 0xD800 || m > 0xDBFF = Iter (unsafeChr m) 1
     | otherwise                = Iter (chr2 m n) 2
@@ -149,24 +165,44 @@ iter (Buf arr off _ _ _) i
         n = A.unsafeIndex arr k
         j = off + i
         k = j + 1
+#endif
 {-# INLINE iter #-}
 
 -- | /O(1)/ Iterate one step through a UTF-16 array, returning the
 -- delta to add to give the next offset to iterate at.
 iter_ :: Buffer -> Int -> Int
+#if MIN_VERSION_text(2,0,0)
+iter_ (Buf arr off len _ _) i = Data.Text.Unsafe.iter_ (Text arr off len) i
+#else
 iter_ (Buf arr off _ _ _) i | m < 0xD800 || m > 0xDBFF = 1
                                 | otherwise                = 2
   where m = A.unsafeIndex arr (off+i)
+#endif
 {-# INLINE iter_ #-}
 
 unsafeThaw :: A.Array -> ST s (A.MArray s)
+#if MIN_VERSION_text(2,0,0)
+unsafeThaw (A.ByteArray arr) = ST $ \s# ->
+                                (# s#, A.MutableByteArray (unsafeCoerce# arr) #)
+#else
 unsafeThaw A.Array{..} = ST $ \s# ->
                           (# s#, A.MArray (unsafeCoerce# aBA) #)
+#endif
 
 readGen :: A.Array -> Int
+#if MIN_VERSION_text(2,0,0)
+readGen (A.ByteArray a) = case indexIntArray# a 0# of r# -> I# r#
+#else
 readGen a = case indexIntArray# (A.aBA a) 0# of r# -> I# r#
+#endif
 
 writeGen :: A.MArray s -> Int -> ST s ()
+#if MIN_VERSION_text(2,0,0)
+writeGen (A.MutableByteArray a) (I# gen#) = ST $ \s0# ->
+  case writeIntArray# a 0# gen# s0# of
+    s1# -> (# s1#, () #)
+#else
 writeGen a (I# gen#) = ST $ \s0# ->
   case writeIntArray# (A.maBA a) 0# gen# s0# of
     s1# -> (# s1#, () #)
+#endif
