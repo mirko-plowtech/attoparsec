@@ -34,7 +34,7 @@ module Data.Attoparsec.ByteString.FastSet
 
 import Data.Bits ((.&.), (.|.))
 import Foreign.Storable (peekByteOff, pokeByteOff)
-import GHC.Exts (Int(I#), iShiftRA#, narrow8Word#, shiftL#)
+import GHC.Exts (Int(I#), iShiftRA#, shiftL#, wordToWord8#, word8ToWord#)
 import GHC.Word (Word8(W8#))
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
@@ -68,7 +68,7 @@ shiftR :: Int -> Int -> Int
 shiftR (I# x#) (I# i#) = I# (x# `iShiftRA#` i#)
 
 shiftL :: Word8 -> Int -> Word8
-shiftL (W8# x#) (I# i#) = W8# (narrow8Word# (x# `shiftL#` i#))
+shiftL (W8# x#) (I# i#) = W8# (wordToWord8# ((word8ToWord# x#) `shiftL#` i#))
 
 index :: Int -> I
 index i = I (i `shiftR` 3) (1 `shiftL` (i .&. 7))
